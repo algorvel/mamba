@@ -13,7 +13,7 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
-from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
+from .wavelet import WaveletRefinement
 
 ARCHITECTURE_VERSION = 2
 MODEL_DEPTHS = {"T": (2, 2, 2, 1, 1), "B": (4, 4, 4, 2, 2), "L": (8, 8, 8, 4, 4)}
@@ -68,6 +68,7 @@ class ScanParameters(nn.Module):
         return dt, b.contiguous(), c.contiguous()
 
     def decode(self, x: Tensor, dt: Tensor, b: Tensor, c: Tensor) -> Tensor:
+        from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
         # CPU reference is intended for small correctness checks only.
         scan = selective_scan_fn if x.is_cuda else selective_scan_ref
         return scan(
@@ -237,7 +238,8 @@ class DehazeMamba(nn.Module):
     """
     def __init__(self, base_channels: int = 24, state_dim: int = 8,
                  depths: Sequence[int] = MODEL_DEPTHS["T"],
-                 architecture_version: int = ARCHITECTURE_VERSION) -> None:
+                 architecture_version: int = ARCHITECTURE_VERSION,
+                 wavelet_refinement: bool = False) -> None:
         super().__init__()
         if architecture_version != ARCHITECTURE_VERSION:
             raise ValueError("Incompatible architecture; corrected model requires retraining")
@@ -264,6 +266,7 @@ class DehazeMamba(nn.Module):
         self.upsample = nn.ModuleList(Upsample(self.widths[i+1], self.widths[i]) for i in range(2))
         self.skip_fusion = nn.ModuleList(SKFusion(self.widths[i]) for i in range(2))
         self.decoder = nn.ModuleList(blocks(self.widths[i], self.depths[4-i]) for i in range(2))
+        self.refinement = WaveletRefinement(self.widths[0]) if wavelet_refinement else nn.Identity()
         self.head = nn.Conv2d(self.widths[0], 3, 3, padding=1)
 
     def forward(self, hazy_rgb: Tensor, sar: Tensor) -> Tensor:
@@ -288,7 +291,7 @@ class DehazeMamba(nn.Module):
             rgb = rgb + self.pfm[i](r, s)
         for i in (1, 0):
             rgb = self.decoder[i](self.skip_fusion[i](self.upsample[i](rgb), skips[i]))
-        return self.head(rgb)[..., :height, :width]
+        return self.head(self.refinement(rgb))[..., :height, :width]
 
 
 def require_current_checkpoint(payload: dict) -> None:

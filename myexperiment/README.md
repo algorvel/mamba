@@ -25,3 +25,7 @@ kill "$(cat train.pid)"
 启动配置、实际 PID、数据配对信息和训练结束后的评估结果追加记录在 `experiment_report.md`。
 
 训练已完成 150 epochs，完整测试 135 张的平均结果为 PSNR 24.3468 dB、SSIM 0.897361、LPIPS 0.090995。各雾强度分项、训练 loss 与耗时见 `experiment_report.md`；逐图指标见 `results/evaluation/metrics.csv`。
+
+## innovate_1：低频引导的小波输出细化
+
+实现、检查点兼容方式及运行命令见 [innovate_1 实现说明](experiment/innovate_1_implementation.md)。使用已有规范化数据时运行 `bash myexperiment/script/run_innovate_1.sh`（从仓库根目录），默认写入独立的 `myexperiment/results/innovate_1`。原 `run_satehaze.sh` 仍运行 baseline。该方案尚未完成正式训练与性能验证。
