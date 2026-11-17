@@ -1,6 +1,6 @@
 # DehazeMamba / MRSHaze 本地复现实验记录
 
-- **记录日期：** 2026-11-16
+- **记录日期：** 2026-10-16
 - **实验对象：** DehazeMamba，数据集 MRSHaze
 - **实验状态：** 150 轮训练和完整测试集评估均已完成，训练与评估进程均正常退出
 - **代码版本：** `modules/dehazeMamba`，分支 `dehazeMamba`，提交 `52257ae`（`Add DehazeMamba reproduction`）
