@@ -9,9 +9,10 @@ import torch.nn.functional as F
 
 def dehaze_loss(prediction: Tensor, target: Tensor, frequency_weight: float = 0.1):
     spatial = F.l1_loss(prediction, target)
-    # Orthonormal FFT keeps the frequency term on a scale comparable to image L1.
-    pred_fft = torch.fft.rfft2(prediction.float(), norm="ortho")
-    target_fft = torch.fft.rfft2(target.float(), norm="ortho")
-    frequency = F.l1_loss(torch.view_as_real(pred_fft), torch.view_as_real(target_fft))
+    # Eq. (9): complex L1 over the full spectrum. Averaging separate real/imag
+    # components or an unweighted half-spectrum changes this objective.
+    pred_fft = torch.fft.fft2(prediction.float())
+    target_fft = torch.fft.fft2(target.float())
+    frequency = (pred_fft - target_fft).abs().mean()
     total = spatial + frequency_weight * frequency
     return total, spatial.detach(), frequency.detach()

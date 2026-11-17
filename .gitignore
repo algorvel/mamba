@@ -13,3 +13,10 @@ checkpoints/
 *.ckpt
 *.csv
 events.out.tfevents.*
+
+# Generated SateHaze1k cache and run artifacts; keep the scripts/reports tracked.
+myexperiment/data/
+myexperiment/logs/
+myexperiment/results/
+myexperiment/run_config.txt
+myexperiment/train.pid

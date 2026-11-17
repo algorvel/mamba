@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import random
 import time
@@ -16,13 +15,14 @@ from tqdm import tqdm
 
 from dehazemamba.data import MRSHazeDataset
 from dehazemamba.losses import dehaze_loss
-from dehazemamba.model import DehazeMamba
+from dehazemamba.model import ARCHITECTURE_VERSION, MODEL_DEPTHS, DehazeMamba, require_current_checkpoint
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", default="/home/johnny/code/dataset/MRSHaze")
-    parser.add_argument("--output-dir", default="outputs/dehazemamba")
+    parser.add_argument("--output-dir", default="outputs/dehazemamba-v2")
+    parser.add_argument("--model-size", choices=MODEL_DEPTHS, default="T")
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--base-channels", type=int, default=24)
@@ -63,7 +63,7 @@ def main() -> None:
     )
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    model = DehazeMamba(args.base_channels, args.state_dim).cuda()
+    model = DehazeMamba(args.base_channels, args.state_dim, MODEL_DEPTHS[args.model_size]).cuda()
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.epochs, eta_min=1e-6
@@ -72,6 +72,7 @@ def main() -> None:
     global_step = 0
     if args.resume:
         checkpoint = torch.load(args.resume, map_location="cuda", weights_only=False)
+        require_current_checkpoint(checkpoint)
         model.load_state_dict(checkpoint["model"])
         optimizer.load_state_dict(checkpoint["optimizer"])
         scheduler.load_state_dict(checkpoint["scheduler"])
@@ -82,6 +83,8 @@ def main() -> None:
     amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     use_scaler = amp_dtype is torch.float16
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
+    if args.resume and "scaler" in checkpoint:
+        scaler.load_state_dict(checkpoint["scaler"])
     n_params = sum(p.numel() for p in model.parameters())
     print(
         f"Device={torch.cuda.get_device_name(0)} torch={torch.__version__} "
@@ -127,13 +130,15 @@ def main() -> None:
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
+            "scaler": scaler.state_dict(),
             "epoch": epoch + 1,
             "global_step": global_step,
             "mean_loss": mean_loss,
             "model_config": {
                 "base_channels": args.base_channels,
                 "state_dim": args.state_dim,
-                "depths": [2, 2, 2, 1, 1],
+                "depths": list(MODEL_DEPTHS[args.model_size]),
+                "architecture_version": ARCHITECTURE_VERSION,
             },
             "train_config": vars(args),
         }
